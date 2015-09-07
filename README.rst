@@ -1,13 +1,9 @@
 thread_timeout
 ==============
 
-Library to safely execute code without fear of the TASK_UNINTERRUPTIBLE state
------------------------------------------------------------------------------
+`thread_timeout` is a Python (2) library. It provides a simple decorator `@thread_timeout` for executing of a potentially long-running operation and auto-terminating if operation hasn't finished in a fixed amount of time.
 
-`thread_timeout` allows to run a piece of python code safely regardless 
-of TASK_UNINTERRUPTIBLE issues.
-
-It provides single decorator, adding a timeout for the function call.
+This allows a python program avoiding TASK_UNINTERRUPTIBLE state.
 
 
 Example of the usage:
@@ -26,10 +22,9 @@ Example of the usage:
         print ("NFS seems to be hung")
 
 
-`thread_timeout` works by running specified function in separate thread and waiting
-for timeout (or finalization) of the thread to return value or raise Exception.
-If thread is not finished before timeout, `thread_timeout` may try to terminate
-thread according to kill_wait value (see below).
+`thread_timeout` works by running specified function in separate thread while waiting
+for timeout (or finalization) of the thread. Decorated function returns value if the function completed before `timeout` seconds, otherwise it may try to terminate thread and then throws an exception according to kill value (see below) .
+Before trying to terminate thread decorator will wait `kill_wait` seconds. 
 
 .. code-block:: python
 
@@ -45,8 +40,8 @@ Thread killing implemented on python level: it will terminate python code, but w
 
 Exceptions:
 -----------
-`ExecTimeoutException` - function did not finish on time, timeout (base class for all following exceptions)
-`KilledExecTimeoutException` - there was a timeout and thread with function was killed successfully
-`FailedKillExecTimeoutException` - there was a timeout and kill attempt but the thread refuses to die
-`NotKillExecTimeoutException` - there was a timeout and there was no attempt to kill thread
+- `ExecTimeoutException` - function did not finish on time, timeout (base class for all following exceptions)
+- `KilledExecTimeoutException` - there was a timeout and thread with function was killed successfully
+- `FailedKillExecTimeoutException` - there was a timeout and kill attempt but the thread refuses to die
+- `NotKillExecTimeoutException` - there was a timeout and there was no attempt to kill thread
 
