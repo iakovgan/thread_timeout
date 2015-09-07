@@ -21,6 +21,9 @@ import signal
 import ctypes
 import wrapt  # pip install wrapt
 from Queue import Queue
+
+__version__='1.0'
+
 '''
     thread_timeout decorator allows to run piece of the python code
     safely regardless of TASK_UNINTERRUPTIBLE issues ('D' state).
