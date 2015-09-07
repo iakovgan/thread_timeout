@@ -22,10 +22,12 @@ import ctypes
 import wrapt  # pip install wrapt
 from Queue import Queue
 '''
-    thread_timeout allows to run piece of the python code safely regardless
-    of TASK_UNINTERRUPTIBLE issues.
+    thread_timeout decorator allows to run piece of the python code
+    safely regardless of TASK_UNINTERRUPTIBLE issues ('D' state).
 
-    It provides single decorator, adding a timeout for the function call.
+    Main sources of 'D' state are broken NFS, bad disk/IO, or kernel bugs.
+
+    Library provides single decorator, adding a timeout for the function call.
 
 
     Example of the usage:
@@ -37,7 +39,7 @@ from Queue import Queue
 
         try:
             print("Result: %s" % NFS_read('/broken_nfs/file'))
-        except ExecTimeoutException:
+        except ExecTimeout:
             print ("NFS seems to be hung")
 
 
@@ -61,48 +63,49 @@ from Queue import Queue
 
     Exceptions:
 
-    ExecTimeoutException - function did not finish on time, timeout
+    ExecTimeout - function did not finish on time, timeout
         (base class for all following exceptions)
-    KilledExecTimeoutException - there was a timeout and thread
+    KilledExecTimeout - there was a timeout and thread
         with function was killed successfully
-    FailedKillExecTimeoutException - there was a timeout and kill attempt
+    FailedKillExecTimeout - there was a timeout and kill attempt
         but the thread refuses to die
-    NotKillExecTimeoutException - there was a timeout and there
+    NotKillExecTimeout - there was a timeout and there
         was no attempt to kill thread
 '''
 
 
-def _kill_thread(t):
+def _kill_thread(thread):
     # heavily based on http://stackoverflow.com/a/15274929/2281274
     # by Johan Dahlin
     # rewrited to avoid licence uncertainty
-    exc = ctypes.py_object(SystemExit)
-    ct = ctypes.c_long(t.ident)
-    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ct, exc)
-    if res == 0:
-        raise ValueError("nonexistent thread id")
-    elif res != 1 : # Returns the number of thread states modified
-        ctypes.pythonapi.PyThreadState_SetAsyncExc(t.ident, None)
-        raise SystemError("PyThreadState_SetAsyncExc failed")
+
+    # due to the strangeness in python 2.x, thread killing happens
+    # within 32 python operations regardless of duration
+    # (f.e. 32 x sleep(1), or 32 x sleep (0.01))
+    # python3 works fine
+    import sys
+    SE = ctypes.py_object(SystemExit)
+    tr = ctypes.c_long(thread.ident)
+    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(tr, SE)
 
 
-class ExecTimeoutException(BaseException):
+class ExecTimeout(BaseException):
     pass
 
 
-class KilledExecTimeoutException(ExecTimeoutException):
+class KilledExecTimeout(ExecTimeout):
     pass
 
 
-class FailedKillExecTimeoutException(ExecTimeoutException):
+class FailedKillExecTimeout(ExecTimeout):
     pass
 
 
-class NotKillExecTimeoutException(ExecTimeoutException):
+class NotKillExecTimeout(ExecTimeout):
     pass
 
 
-def thread_timeout(delay, kill=True, kill_wait=0.1):
+def thread_timeout(delay, kill=True, kill_wait=0.04):
     @wrapt.decorator
     def wrapper(wrapped, instance, args, kwargs):
         queue = Queue()
@@ -116,17 +119,17 @@ def thread_timeout(delay, kill=True, kill_wait=0.1):
         thread.join(delay)
         if thread.isAlive():
             if not kill:
-                raise NotKillExecTimeoutException(
+                raise NotKillExecTimeout(
                     "Timeout and no kill attempt")
             _kill_thread(thread)
             time.sleep(kill_wait)
-            ## FIXME isAlive is giving fals positive results
+            # FIXME isAlive is giving fals positive results
             if thread.isAlive():
-                raise FailedKillExecTimeoutException(
+                raise FailedKillExecTimeout(
                     "Timeout, thread refuses to die in %s seconds" %
                     kill_wait)
             else:
-                raise KilledExecTimeoutException(
+                raise KilledExecTimeout(
                     "Timeout and thread was killed")
         return queue.get()
     return wrapper
@@ -143,7 +146,7 @@ def test1():
     try:
         res = func(1)
         print("Test1 OK")
-    except ExecTimeoutException:
+    except ExecTimeout:
         print("Test1 failed, timeout too soon")
 
 
@@ -159,7 +162,7 @@ def test2():
     try:
         func(3)
         raise Exception("Test2 failed: timeout does not work")
-    except ExecTimeoutException as e:
+    except ExecTimeout as e:
         print("  .. got excepted execption %s" % repr(e))
         print("Test2 OK")
 
@@ -175,8 +178,9 @@ def test3():
 
 
 def test4():
-    ''' FailedKillExecTimeoutException
-    FIXME! This is a wired test.  thread_timeout should actually stop this function 
+    ''' FailedKillExecTimeout
+        FIXME! This is a wired test.  thread_timeout
+        should actually stop this function
     '''
     @thread_timeout(1)
     def looong(x):
@@ -184,13 +188,13 @@ def test4():
             time.sleep(2)
     try:
         looong(20)
-        raise Exception('FailedKillExecTimeoutException was expected')
-    except FailedKillExecTimeoutException as e:
+        raise Exception('FailedKillExecTimeout was expected')
+    except FailedKillExecTimeout as e:
         print("Test4 OK, got expected exception %s" % repr(e))
 
 
 def test5():
-    ''' NotKillExecTimeoutException
+    ''' NotKillExecTimeout
     '''
     @thread_timeout(1, kill=False)
     def looong_and_unkillable(x):
@@ -198,13 +202,13 @@ def test5():
             time.sleep(2)
     try:
         looong_and_unkillable(2)
-        raise Exception('NotKillExecTimeoutException was expected')
-    except NotKillExecTimeoutException as e:
+        raise Exception('NotKillExecTimeout was expected')
+    except NotKillExecTimeout as e:
         print("Test5 OK, got expected exception %s" % repr(e))
 
 
 def test6():
-    ''' decorator is not changing python's into inspection    
+    ''' decorator is not changing python's into inspection
     '''
     from inspect import getargspec
 
@@ -214,28 +218,29 @@ def test6():
     func_with_timeout = thread_timeout(1)(func)
     assert getargspec(func) == getargspec(func_with_timeout)
 
-def test6():
-    ''' Class methods    
+
+def test7():
+    ''' Class methods
     '''
     class Class(object):
 
-        @thread_timeout(1) 
+        @thread_timeout(1)
         def short(self, x):
             return x
 
-        @thread_timeout(1) 
+        @thread_timeout(1, kill_wait=0.33)
         def looong(self, x):
-            time.sleep(1000)
+            for x in range(0, 100):
+                time.sleep(0.01)
             return x
 
     obj = Class()
     res = obj.short("OK")
-    assert res == 'OK'  
+    assert res == 'OK'
     try:
         res = obj.looong('KO')
-    except KilledExecTimeoutException:
+    except KilledExecTimeout:
         pass
-
 
 if __name__ == "__main__":
     print("Running tests")
