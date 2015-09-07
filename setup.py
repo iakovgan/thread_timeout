@@ -1,7 +1,8 @@
 #!/usr/bin/python
+import re
+import codecs
 from setuptools import setup, find_packages
 
-import re
 # hacky way to get __version__ from __init__
 # we can not just import since some dependancies could be not installed yet 
 metadata = dict(re.findall("\n__([a-z]+)__ = '([^']+)'", open('thread_timeout/__init__.py').read()))
