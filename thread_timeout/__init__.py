@@ -14,6 +14,15 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+'''
+    thread_timeout decorator allows to run piece of the python code
+    safely regardless of TASK_UNINTERRUPTIBLE issues ('D' state).
+
+    Main sources of 'D' state are broken NFS, bad disk/IO, or kernel bugs.
+
+    Library provides single decorator, adding a timeout for the function call.
+'''
+
 from __future__ import print_function
 import threading
 import time
@@ -23,59 +32,6 @@ import wrapt  # pip install wrapt
 from Queue import Queue
 
 __version__ = '1.0'
-
-'''
-    thread_timeout decorator allows to run piece of the python code
-    safely regardless of TASK_UNINTERRUPTIBLE issues ('D' state).
-
-    Main sources of 'D' state are broken NFS, bad disk/IO, or kernel bugs.
-
-    Library provides single decorator, adding a timeout for the function call.
-
-
-    Example of the usage:
-        import thread_timeout
-
-        @thread_timeout(10, kill=False)
-        def NFS_read(path):
-            file(path, 'r').read()
-
-        try:
-            print("Result: %s" % NFS_read('/broken_nfs/file'))
-        except ExecTimeout:
-            print ("NFS seems to be hung")
-
-
-    thread_timeout works by running specified function in separate
-    thread and waiting for timeout (or finalization) of the thread
-    to return value or raise exception.
-    If thread is not finished before timeout, thread_timeout will
-    try to terminate thread according to kill value (see below).
-
-    thread_timeout(timeout, kill=True, kill_wait=0.1)
-
-    timeout - seconds, floating, how long to wait thread.
-    kill - if True (default) attempt to terminate thread with function
-    kill_wait - how long to wait after killing before reporting
-    an unresponsive thread
-
-    THREAD KILLING
-
-    Thread killing implemented on python level: it will terminate python
-    code, but will not terminate any IO operations or subprocess calls.
-
-    Exceptions:
-
-    ExecTimeout - function did not finish on time, timeout
-        (base class for all following exceptions)
-    KilledExecTimeout - there was a timeout and thread
-        with function was killed successfully
-    FailedKillExecTimeout - there was a timeout and kill attempt
-        but the thread refuses to die
-    NotKillExecTimeout - there was a timeout and there
-        was no attempt to kill thread
-'''
-
 
 def _kill_thread(thread):
     # heavily based on http://stackoverflow.com/a/15274929/2281274
