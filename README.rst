@@ -10,7 +10,7 @@ Example of the usage:
 
 .. code-block:: python
 
-    import thread_timeout
+    from thread_timeout import thread_timeout
 
     @thread_timeout(10, kill=False)
     def NFS_read(path):
