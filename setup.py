@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import re
+import os.path
 import codecs
 from setuptools import setup, find_packages
 
