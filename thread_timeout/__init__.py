@@ -31,7 +31,6 @@ import ctypes
 import wrapt  # pip install wrapt
 from Queue import Queue
 
-__version__ = '1.0'
 
 def _kill_thread(thread):
     # heavily based on http://stackoverflow.com/a/15274929/2281274
